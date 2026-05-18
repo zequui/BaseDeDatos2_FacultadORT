@@ -1,5 +1,10 @@
 # Repositorio de Obligatorios - Bases de Datos 2 (ORT)
 
+![Oracle](https://img.shields.io/badge/Oracle-Database-red)
+![MongoDB](https://img.shields.io/badge/MongoDB-NoSQL-green)
+![PLSQL](https://img.shields.io/badge/PLSQL-Stored_Procedures-blue)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
 Este repositorio contiene el desarrollo completo del obligatorio de la materia **Bases de Datos 2** de la Facultad de Ingeniería de la Universidad ORT Uruguay. El objetivo es documentar el proceso de análisis, diseño e implementación de soluciones relacionales y NoSQL aplicadas al escenario propuesto.
 
 ## 📚 Contenido
@@ -30,6 +35,26 @@ Este repositorio contiene el desarrollo completo del obligatorio de la materia *
 - MongoDB
 - SQL / PL-SQL
 - Scripts de integración y migración de datos
+
+## 📁 Estructura del proyecto
+
+```text
+sql/
+├── ddl/
+├── dml/
+├── procedures/
+└── queries/
+
+mongodb/
+├── collections/
+├── queries/
+└── sample_data/
+
+docs/
+diagrams/
+integration/
+assets/
+```
 
 ## 👥 Integrantes del grupo
 
