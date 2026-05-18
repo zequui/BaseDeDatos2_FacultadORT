@@ -1,0 +1,40 @@
+# IDEs
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip
+*.rar
+
+# Environment files
+.env
+
+# Database local files
+*.db
+
+# MongoDB
+dump/
+
+# Oracle / SQL Developer
+*.sqldeveloper/
+
+# Generated files
+dist/
+build/
