@@ -57,7 +57,6 @@
 | Si `archivada=0` entonces `fechaArchivado` debe ser NULL; si `archivada=1` debe estar presente | COMUNIDAD | Semántica | Estructural | `CHECK ((archivada = 0 AND fechaArchivado IS NULL) OR (archivada = 1 AND fechaArchivado IS NOT NULL))` |
 | `fechaAceptacion` no puede ser anterior a `fechaReclamo` | RECLAMA | Semántica | Estructural | `CHECK (fechaAceptacion IS NULL OR fechaAceptacion >= fechaReclamo)` |
 | Si estado ≠ 'cerrada' entonces `fecha_cierre` y `hora_cierre` deben ser NULL; si estado = 'cerrada' ambos deben estar presentes | PUBLICACION | Semántica | Estructural | `CHECK ((estado <> 'cerrada' AND fecha_cierre IS NULL AND hora_cierre IS NULL) OR (estado = 'cerrada' AND fecha_cierre IS NOT NULL AND hora_cierre IS NOT NULL))` |
-| `fechaAplicada` no puede ser posterior a la fecha actual | CONFIGURACION | Dominio | Estructural | `CHECK (fechaAplicada <= SYSDATE)` — limitación: SYSDATE en CHECK no es determinista en Oracle; se evalúa al momento del INSERT pero no al hacer UPDATE posterior |
 
 ---
 
@@ -81,3 +80,4 @@
 | Un agente GENERADOR o MODERADOR puede cerrar una publicación; el GENERADOR solo puede cerrar las propias | PUBLICACION | Semántica | No estructural | `trg_cierre_publicacion` |
 | El puntaje de una publicación se actualiza automáticamente al registrar un voto | PUBLICACION | Semántica | No estructural | `trg_actualizar_puntaje` |
 | Un agente no puede ser transferido a un usuario que ya lo administra | RECLAMA | Semántica | No estructural | `trg_reclama_no_mismo_usuario` |
+| La fecha de aplicación de una configuración no puede ser futura | CONFIGURACION | Semántica | No estructural | `trg_config_fecha` |

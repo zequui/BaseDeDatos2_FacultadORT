@@ -61,6 +61,7 @@ El atributo `estado` en PUBLICACION maneja tres valores: `'activa'`, `'cerrada'`
 
 - Se asume que la versión de configuración es un entero incremental por agente, comenzando en 1. El sistema no restringe estructuralmente el incremento, pero el procedimiento del Requerimiento 2.7 debe encargarse de calcular la próxima versión.
 - Se asume que la "configuración activa" del agente no se almacena redundantemente en AGENTE, sino que se obtiene consultando el registro de CONFIGURACION con la versión más alta para ese agente. Esto evita inconsistencias entre AGENTE y CONFIGURACION.
+- Se asume que la fecha de aplicación de una configuración no puede ser futura. Esta restricción se implementa mediante el trigger `trg_config_fecha`, ya que Oracle no permite utilizar `SYSDATE` dentro de restricciones CHECK.
 
 ### Sobre contenido
 
@@ -78,8 +79,9 @@ El atributo `estado` en PUBLICACION maneja tres valores: `'activa'`, `'cerrada'`
 ### Sobre moderación
 
 - Se asume que el tipo de acción de moderación (`tipo` en INTERVIENE) es texto libre con ejemplos como 'ocultar', 'cerrar', 'eliminar', ya que el enunciado no define un conjunto cerrado de valores.
+- - Se asume que un agente moderador debe pertenecer a la comunidad sobre la que realiza acciones de moderación. Esta restricción es controlada por el trigger `trg_interviene_moderador`.
 - Se asume que una misma publicación puede recibir múltiples intervenciones del mismo moderador en distintos momentos, razón por la cual `fecha` y `hora` forman parte de la clave primaria de INTERVIENE.
-- Se asume que la comunidad en INTERVIENE es la misma donde fue creado el contenido intervenido. No se valida estructuralmente que `id_comunidad` en INTERVIENE coincida con `id_comunidad` en CONTENIDO, ya que esto sería una restricción cruzada compleja. Se delega al procedimiento del Requerimiento 2.6 garantizar esta coherencia.
+- Se asume que la comunidad registrada en INTERVIENE coincide con la comunidad a la que pertenece el contenido intervenido. Esta coherencia no se valida estructuralmente mediante claves foráneas ni mediante triggers, por lo que constituye un supuesto del sistema.
 
 ### Sobre comunidades
 

@@ -55,10 +55,7 @@ CREATE TABLE CONFIGURACION (
     CONSTRAINT pk_configuracion PRIMARY KEY (id_agente, version),
     CONSTRAINT fk_config_agente FOREIGN KEY (id_agente) REFERENCES AGENTE(id),
     CONSTRAINT ck_config_tipo CHECK (configuracion IN ('Simple', 'Compuesta')),
-    CONSTRAINT ck_config_version CHECK (version > 0),
-    CONSTRAINT ck_config_fecha CHECK (
-        fechaAplicada <= SYSDATE
-    )
+    CONSTRAINT ck_config_version CHECK (version > 0)
 );
 
 -- -------------------------------------------------------------
@@ -74,7 +71,7 @@ CREATE TABLE COMUNIDAD (
     fechaArchivado DATE,
     CONSTRAINT pk_comunidad PRIMARY KEY (id),
     CONSTRAINT uq_comunidad_nombre UNIQUE (nombre),
-    CONSTRAINT ck_comunidad_arch CHECK (archivada IN (0, 1))
+    CONSTRAINT ck_comunidad_arch CHECK (archivada IN (0, 1)),
     CONSTRAINT ck_comunidad_fechas CHECK (
         (archivada = 0 AND fechaArchivado IS NULL)
         OR
@@ -124,7 +121,7 @@ CREATE TABLE CONTENIDO (
     id_comunidad NUMBER NOT NULL,
     CONSTRAINT pk_contenido PRIMARY KEY (id),
     CONSTRAINT fk_cont_agente FOREIGN KEY (id_agente) REFERENCES AGENTE(id),
-    CONSTRAINT fk_cont_comunidad FOREIGN KEY (id_comunidad) REFERENCES COMUNIDAD(id)
+    CONSTRAINT fk_cont_comunidad FOREIGN KEY (id_comunidad) REFERENCES COMUNIDAD(id),
     CONSTRAINT ck_cont_hora_formato CHECK (
         REGEXP_LIKE(
             horaCreacion,

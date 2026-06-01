@@ -279,3 +279,19 @@ BEGIN
     END IF;
 END;
 /
+
+-- -------------------------------------------------------------
+-- TRG 13: Fecha de aplicación no puede ser futura
+-- -------------------------------------------------------------
+CREATE OR REPLACE TRIGGER trg_config_fecha_futura
+BEFORE INSERT OR UPDATE ON CONFIGURACION
+FOR EACH ROW
+BEGIN
+    IF :NEW.fechaAplicada > SYSDATE THEN
+        RAISE_APPLICATION_ERROR(
+            -20100,
+            'La fecha de aplicación de la configuración no puede ser futura.'
+        );
+    END IF;
+END;
+/
