@@ -279,14 +279,3 @@ BEGIN
     END IF;
 END;
 /
-
--- =============================================================
--- ÍNDICES (mejoran joins y búsquedas frecuentes)
--- =============================================================
-CREATE INDEX idx_agente_usuario     ON AGENTE(id_usuario);
-CREATE INDEX idx_contenido_agente   ON CONTENIDO(id_agente);
-CREATE INDEX idx_contenido_comunidad ON CONTENIDO(id_comunidad);
-CREATE INDEX idx_publicacion_estado ON PUBLICACION(estado);
-CREATE INDEX idx_vota_publicacion   ON VOTA(id_publicacion);
-CREATE INDEX idx_participa_comunidad ON PARTICIPA(id_comunidad);
-CREATE INDEX idx_config_agente      ON CONFIGURACION(id_agente);
