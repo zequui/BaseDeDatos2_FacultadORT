@@ -7,7 +7,17 @@ CREATE OR REPLACE PROCEDURE registrarAgente(
 )
 AS
     v_id_agente NUMBER;
+    v_activo_usuario USUARIO.activo%TYPE;
 BEGIN
+
+    SELECT activo
+    INTO v_activo_usuario
+    FROM USUARIO
+    WHERE mail = p_id_usuario;
+
+    IF v_activo_usuario = 'Suspendido' THEN
+        RAISE_APPLICATION_ERROR(-20205, 'El usuario está suspendido y no puede registrar nuevos agentes.');
+    END IF;
 
     INSERT INTO AGENTE(
         nombre,
@@ -38,5 +48,9 @@ BEGIN
         p_configuracion
     );
 
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
 END;
 /

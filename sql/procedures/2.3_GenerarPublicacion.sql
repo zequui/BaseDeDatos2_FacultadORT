@@ -8,6 +8,14 @@ AS
     v_id_contenido NUMBER;
 BEGIN
 
+    IF TRIM(p_titulo) IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20401, 'El título de la publicación no puede estar vacío.');
+    END IF;
+
+    IF TRIM(p_contenido) IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20402, 'El contenido de la publicación no puede estar vacío.');
+    END IF;
+
     INSERT INTO CONTENIDO(
         fechaCreacion,
         horaCreacion,
@@ -33,5 +41,9 @@ BEGIN
         p_contenido
     );
 
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
 END;
 /

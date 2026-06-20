@@ -5,7 +5,21 @@ CREATE OR REPLACE PROCEDURE moderarContenido(
     p_tipo VARCHAR2
 )
 AS
+    v_id_comunidad_contenido CONTENIDO.id_comunidad%TYPE;
 BEGIN
+
+    IF p_tipo NOT IN ('eliminar', 'advertir', 'restaurar') THEN
+        RAISE_APPLICATION_ERROR(-20601, 'Tipo de moderación inválido. Los valores permitidos son: eliminar, advertir, restaurar.');
+    END IF;
+
+    SELECT id_comunidad
+    INTO v_id_comunidad_contenido
+    FROM CONTENIDO
+    WHERE id = p_id_contenido;
+
+    IF v_id_comunidad_contenido <> p_id_comunidad THEN
+        RAISE_APPLICATION_ERROR(-20602, 'El contenido indicado no pertenece a la comunidad especificada.');
+    END IF;
 
     INSERT INTO INTERVIENE(
         id_agente,
@@ -24,5 +38,9 @@ BEGIN
         TO_CHAR(SYSDATE,'HH24:MI:SS')
     );
 
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
 END;
 /

@@ -7,7 +7,32 @@ CREATE OR REPLACE PROCEDURE generarComentario(
 )
 AS
     v_id_contenido NUMBER;
+    v_id_comunidad CONTENIDO.id_comunidad%TYPE;
 BEGIN
+
+    IF p_id_publicacion IS NOT NULL THEN
+        -- Comentario directo a una publicación: tomar la comunidad de esa publicación
+        SELECT id_comunidad
+        INTO v_id_comunidad
+        FROM CONTENIDO
+        WHERE id = p_id_publicacion;
+
+    ELSE
+        -- Respuesta a otro comentario: recorrer la cadena hasta encontrar
+        -- el comentario que tiene id_publicacion NOT NULL y tomar su comunidad
+        SELECT id_comunidad
+        INTO v_id_comunidad
+        FROM CONTENIDO
+        WHERE id = (
+            SELECT id_publicacion
+            FROM COMENTARIO
+            START WITH id = p_id_comentario_padre
+            CONNECT BY id = PRIOR id_comentario_padre
+                AND id_publicacion IS NULL
+        )
+        AND ROWNUM = 1;
+
+    END IF;
 
     INSERT INTO CONTENIDO(
         fechaCreacion,
@@ -19,7 +44,7 @@ BEGIN
         SYSDATE,
         TO_CHAR(SYSDATE,'HH24:MI:SS'),
         p_id_agente,
-        p_id_comunidad
+        v_id_comunidad
     )
     RETURNING id INTO v_id_contenido;
 
@@ -36,5 +61,9 @@ BEGIN
         p_id_comentario_padre
     );
 
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
 END;
 /

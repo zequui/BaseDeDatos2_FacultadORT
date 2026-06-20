@@ -5,7 +5,17 @@ CREATE OR REPLACE PROCEDURE actualizarConfiguracion(
 )
 AS
     v_version NUMBER;
+    v_activo_agente AGENTE.activo%TYPE;
 BEGIN
+
+    SELECT activo
+    INTO v_activo_agente
+    FROM AGENTE
+    WHERE id = p_id_agente;
+
+    IF v_activo_agente = 'Suspendido' THEN
+        RAISE_APPLICATION_ERROR(-20701, 'El agente está suspendido y no puede actualizar su configuración.');
+    END IF;
 
     SELECT NVL(MAX(version),0)
     INTO v_version
@@ -27,5 +37,9 @@ BEGIN
         p_configuracion
     );
 
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
 END;
 /

@@ -5,7 +5,28 @@ CREATE OR REPLACE FUNCTION rankingPublicaciones(
 RETURN SYS_REFCURSOR
 AS
     v_cursor SYS_REFCURSOR;
+    v_existe NUMBER;
 BEGIN
+
+    SELECT COUNT(*)
+    INTO v_existe
+    FROM COMUNIDAD
+    WHERE id = p_id_comunidad;
+
+    IF v_existe = 0 THEN
+        RAISE_APPLICATION_ERROR(-20801, 'La comunidad con id ' || p_id_comunidad || ' no existe.');
+    END IF;
+
+    IF p_usuario IS NOT NULL THEN
+        SELECT COUNT(*)
+        INTO v_existe
+        FROM USUARIO
+        WHERE mail = p_usuario;
+
+        IF v_existe = 0 THEN
+            RAISE_APPLICATION_ERROR(-20802, 'El usuario ' || p_usuario || ' no existe.');
+        END IF;
+    END IF;
 
     OPEN v_cursor FOR
 
