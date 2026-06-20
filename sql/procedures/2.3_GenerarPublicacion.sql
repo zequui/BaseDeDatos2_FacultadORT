@@ -1,4 +1,4 @@
-create or replace PROCEDURE generarPublicacion(
+CREATE OR REPLACE PROCEDURE generarPublicacion(
     p_id_agente NUMBER,
     p_id_comunidad NUMBER,
     p_titulo VARCHAR2,
