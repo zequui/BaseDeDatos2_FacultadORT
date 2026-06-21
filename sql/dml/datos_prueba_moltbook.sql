@@ -125,6 +125,9 @@ BEGIN
     INSERT INTO PARTICIPA VALUES (v_obs2, v_c2, 'activo');
     INSERT INTO PARTICIPA VALUES (v_obs3, v_c1, 'activo');
 
+
+    INSERT INTO PARTICIPA VALUES (v_obs1, v_c2, 'pasivo');
+
     -----------------------------------------------------------------
     -- 5) RECLAMA + transferencia de administración
     --    Nova Poster pasa de luna.admin1 a mateo.admin2
@@ -325,7 +328,7 @@ END;
 
 -- =============================================================
 -- PRUEBAS NEGATIVAS DE TRIGGERS
--- 
+--
 -- Elaboradas con asistencia de ChatGPT (OpenAI, GPT-5.5).
 --
 -- Contexto de uso:
@@ -339,325 +342,282 @@ END;
 -- coherencia con el modelo de datos y la implementación final.
 -- =============================================================
 
+-- NOTA GENERAL: cada prueba negativa está en su propio bloque
+-- DECLARE...BEGIN...END con variables locales para no depender
+-- de IDs hardcodeados. Se consulta la BD para obtener los IDs
+-- correctos según nombre/mail de las entidades creadas arriba.
+
 -- =============================================================
 -- trg_pub_comunidad_archivada
--- Publicar en una comunidad archivada
+-- Un generador miembro activo intenta publicar en la comunidad
+-- archivada (v_c3 = 'Archived Lab').
+-- Espera: ORA-20020
 -- =============================================================
 
 -- DECLARE
---     v_id NUMBER;
+--     v_agente  NUMBER;
+--     v_com     NUMBER;
+--     v_id      NUMBER;
 -- BEGIN
---     INSERT INTO CONTENIDO (
---         fechaCreacion,
---         horaCreacion,
---         id_agente,
---         id_comunidad
---     )
---     VALUES (
---         TRUNC(SYSDATE),
---         '10:00:00',
---         1,
---         3
---     )
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Codex Writer';
+--     SELECT id INTO v_com    FROM COMUNIDAD WHERE nombre = 'Archived Lab';
+--
+--     -- Primero lo hacemos miembro para que no falle otro trigger antes
+--     INSERT INTO PARTICIPA VALUES (v_agente, v_com, 'activo');
+--
+--     INSERT INTO CONTENIDO (fechaCreacion, horaCreacion, id_agente, id_comunidad)
+--     VALUES (TRUNC(SYSDATE), '10:00:00', v_agente, v_com)
 --     RETURNING id INTO v_id;
 --
---     INSERT INTO PUBLICACION (
---         id,
---         titulo,
---         contenido,
---         estado,
---         puntaje
---     )
---     VALUES (
---         v_id,
---         'Publicacion invalida',
---         'Debe fallar por comunidad archivada',
---         'activa',
---         0
---     );
+--     INSERT INTO PUBLICACION (id, titulo, contenido, estado, puntaje)
+--     VALUES (v_id, 'Publicacion invalida', 'Debe fallar por comunidad archivada', 'activa', 0);
 -- END;
 -- /
 
 -- =============================================================
 -- trg_vota_tipo
--- Agente que NO es observador intenta votar
+-- Un agente GENERADOR (no observador) intenta votar.
+-- Espera: ORA-20010
 -- =============================================================
 
--- INSERT INTO VOTA (
---     id_agente,
---     id_publicacion,
---     fecha,
---     hora,
---     positivo
--- )
--- VALUES (
---     1,
---     1,
---     TRUNC(SYSDATE),
---     '10:00:00',
---     1
--- );
+-- DECLARE
+--     v_agente NUMBER;
+--     v_pub    NUMBER;
+-- BEGIN
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Codex Writer';   -- generador
+--     SELECT id INTO v_pub    FROM CONTENIDO c
+--                               JOIN PUBLICACION p ON p.id = c.id
+--                              WHERE p.titulo = 'Buenas prácticas para prompts evaluables';
+--
+--     INSERT INTO VOTA (id_agente, id_publicacion, fecha, hora, positivo)
+--     VALUES (v_agente, v_pub, TRUNC(SYSDATE), '10:00:00', 1);
+-- END;
+-- /
 
 -- =============================================================
 -- trg_vota_agente_activo
--- Agente suspendido intenta votar
+-- Un OBSERVADOR suspendido intenta votar.
+-- Espera: ORA-20001
 -- =============================================================
 
--- UPDATE AGENTE
--- SET activo = 'Suspendido'
--- WHERE id = 4;
+-- DECLARE
+--     v_agente NUMBER;
+--     v_pub    NUMBER;
+-- BEGIN
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Scout Vote';   -- observador
+--     SELECT id INTO v_pub    FROM CONTENIDO c
+--                               JOIN PUBLICACION p ON p.id = c.id
+--                              WHERE p.titulo = 'Resultados preliminares del ranking';
 --
--- INSERT INTO VOTA (
---     id_agente,
---     id_publicacion,
---     fecha,
---     hora,
---     positivo
--- )
--- VALUES (
---     4,
---     1,
---     TRUNC(SYSDATE),
---     '10:05:00',
---     1
--- );
+--     UPDATE AGENTE SET activo = 'Suspendido' WHERE id = v_agente;
+--
+--     INSERT INTO VOTA (id_agente, id_publicacion, fecha, hora, positivo)
+--     VALUES (v_agente, v_pub, TRUNC(SYSDATE), '10:05:00', 1);
+--
+--     -- Restaurar para no afectar otras pruebas
+--     -- UPDATE AGENTE SET activo = 'Activo' WHERE id = v_agente;
+-- END;
+-- /
 
 -- =============================================================
 -- trg_contenido_agente_activo
--- Agente suspendido intenta publicar
+-- Un agente GENERADOR suspendido intenta crear contenido.
+-- Espera: ORA-20001
 -- =============================================================
 
--- UPDATE AGENTE
--- SET activo = 'Suspendido'
--- WHERE id = 1;
---
 -- DECLARE
---     v_id NUMBER;
+--     v_agente NUMBER;
+--     v_com    NUMBER;
+--     v_id     NUMBER;
 -- BEGIN
---     INSERT INTO CONTENIDO (
---         fechaCreacion,
---         horaCreacion,
---         id_agente,
---         id_comunidad
---     )
---     VALUES (
---         TRUNC(SYSDATE),
---         '10:10:00',
---         1,
---         1
---     )
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Codex Writer';
+--     SELECT id INTO v_com    FROM COMUNIDAD WHERE nombre = 'AI Ethics';
+--
+--     UPDATE AGENTE SET activo = 'Suspendido' WHERE id = v_agente;
+--
+--     INSERT INTO CONTENIDO (fechaCreacion, horaCreacion, id_agente, id_comunidad)
+--     VALUES (TRUNC(SYSDATE), '10:10:00', v_agente, v_com)
 --     RETURNING id INTO v_id;
+--
+--     -- Restaurar para no afectar otras pruebas
+--     -- UPDATE AGENTE SET activo = 'Activo' WHERE id = v_agente;
 -- END;
 -- /
 
 -- =============================================================
 -- trg_publicacion_tipo_agente
--- Observador intenta publicar
+-- Un agente MODERADOR (no generador) intenta crear una publicación.
+-- Espera: ORA-20011
 -- =============================================================
 
 -- DECLARE
---     v_id NUMBER;
+--     v_agente NUMBER;
+--     v_com    NUMBER;
+--     v_id     NUMBER;
 -- BEGIN
---     INSERT INTO CONTENIDO (
---         fechaCreacion,
---         horaCreacion,
---         id_agente,
---         id_comunidad
---     )
---     VALUES (
---         TRUNC(SYSDATE),
---         '10:15:00',
---         4,
---         1
---     )
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Guardian Mod';  -- moderador
+--     SELECT id INTO v_com    FROM COMUNIDAD WHERE nombre = 'AI Ethics';
+--
+--     INSERT INTO CONTENIDO (fechaCreacion, horaCreacion, id_agente, id_comunidad)
+--     VALUES (TRUNC(SYSDATE), '10:15:00', v_agente, v_com)
 --     RETURNING id INTO v_id;
 --
---     INSERT INTO PUBLICACION (
---         id,
---         titulo,
---         contenido,
---         estado,
---         puntaje
---     )
---     VALUES (
---         v_id,
---         'Intento invalido',
---         'Observador publicando',
---         'activa',
---         0
---     );
+--     INSERT INTO PUBLICACION (id, titulo, contenido, estado, puntaje)
+--     VALUES (v_id, 'Intento invalido', 'Moderador intentando publicar', 'activa', 0);
 -- END;
 -- /
 
 -- =============================================================
 -- trg_pub_miembro_activo
--- Miembro pasivo intenta publicar
+-- Un generador con membresía PASIVA intenta publicar.
+-- Requiere agregar a gen3 en c2 como pasivo (no está en c2).
+-- Espera: ORA-20031
 -- =============================================================
 
 -- DECLARE
---     v_id NUMBER;
+--     v_agente NUMBER;
+--     v_com    NUMBER;
+--     v_id     NUMBER;
 -- BEGIN
---     INSERT INTO CONTENIDO (
---         fechaCreacion,
---         horaCreacion,
---         id_agente,
---         id_comunidad
---     )
---     VALUES (
---         TRUNC(SYSDATE),
---         '10:20:00',
---         5,
---         1
---     )
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Echo Writer';     -- generador, miembro pasivo de c2
+--     SELECT id INTO v_com    FROM COMUNIDAD WHERE nombre = 'Prompt Engineering';
+--
+--     -- Echo Writer no está en c2: primero insertarlo como pasivo
+--     INSERT INTO PARTICIPA VALUES (v_agente, v_com, 'pasivo');
+--
+--     INSERT INTO CONTENIDO (fechaCreacion, horaCreacion, id_agente, id_comunidad)
+--     VALUES (TRUNC(SYSDATE), '10:20:00', v_agente, v_com)
 --     RETURNING id INTO v_id;
 --
---     INSERT INTO PUBLICACION (
---         id,
---         titulo,
---         contenido,
---         estado,
---         puntaje
---     )
---     VALUES (
---         v_id,
---         'Miembro pasivo',
---         'Debe fallar',
---         'activa',
---         0
---     );
+--     INSERT INTO PUBLICACION (id, titulo, contenido, estado, puntaje)
+--     VALUES (v_id, 'Miembro pasivo', 'Debe fallar por membresía pasiva', 'activa', 0);
 -- END;
 -- /
 
 -- =============================================================
 -- trg_comentario_comunidad
--- Comentar en una comunidad donde no participa
+-- Un generador intenta comentar en una comunidad a la que no pertenece.
+-- gen3 (Echo Writer) no participa en c2 (Prompt Engineering).
+-- Espera: ORA-20050
 -- =============================================================
 
 -- DECLARE
---     v_id NUMBER;
+--     v_agente NUMBER;
+--     v_com    NUMBER;
+--     v_pub    NUMBER;
+--     v_id     NUMBER;
 -- BEGIN
---     INSERT INTO CONTENIDO (
---         fechaCreacion,
---         horaCreacion,
---         id_agente,
---         id_comunidad
---     )
---     VALUES (
---         TRUNC(SYSDATE),
---         '10:25:00',
---         6,
---         2
---     )
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Echo Writer';     -- no está en c2
+--     SELECT id INTO v_com    FROM COMUNIDAD WHERE nombre = 'Prompt Engineering';
+--     SELECT id INTO v_pub    FROM CONTENIDO c
+--                               JOIN PUBLICACION p ON p.id = c.id
+--                              WHERE p.titulo = 'Patrones de respuesta en conversaciones largas'; -- pub en c2
+--
+--     INSERT INTO CONTENIDO (fechaCreacion, horaCreacion, id_agente, id_comunidad)
+--     VALUES (TRUNC(SYSDATE), '10:25:00', v_agente, v_com)
 --     RETURNING id INTO v_id;
 --
---     INSERT INTO COMENTARIO (
---         id,
---         contenido,
---         id_publicacion,
---         id_comentario_padre
---     )
---     VALUES (
---         v_id,
---         'Comentario invalido',
---         1,
---         NULL
---     );
+--     INSERT INTO COMENTARIO (id, contenido, id_publicacion, id_comentario_padre)
+--     VALUES (v_id, 'Comentario invalido', v_pub, NULL);
 -- END;
 -- /
 
 -- =============================================================
 -- trg_comentario_pub_cerrada
--- Comentar una publicación cerrada
+-- Comentar una publicación que está cerrada (v_p3).
+-- Espera: ORA-20040
 -- =============================================================
 
 -- DECLARE
---     v_bad_com NUMBER;
+--     v_agente NUMBER;
+--     v_com    NUMBER;
+--     v_pub    NUMBER;
+--     v_id     NUMBER;
 -- BEGIN
---     INSERT INTO CONTENIDO (
---         fechaCreacion,
---         horaCreacion,
---         id_agente,
---         id_comunidad
---     )
---     VALUES (
---         TRUNC(SYSDATE),
---         '10:30:00',
---         1,
---         1
---     )
---     RETURNING id INTO v_bad_com;
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Codex Writer';
+--     SELECT id INTO v_com    FROM COMUNIDAD WHERE nombre = 'AI Ethics';
+--     SELECT id INTO v_pub    FROM CONTENIDO c
+--                               JOIN PUBLICACION p ON p.id = c.id
+--                              WHERE p.titulo = 'Comparativa de modelos de moderación'; -- cerrada
 --
---     INSERT INTO COMENTARIO (
---         id,
---         contenido,
---         id_publicacion,
---         id_comentario_padre
---     )
---     VALUES (
---         v_bad_com,
---         'Este comentario debe fallar',
---         3,
---         NULL
---     );
+--     INSERT INTO CONTENIDO (fechaCreacion, horaCreacion, id_agente, id_comunidad)
+--     VALUES (TRUNC(SYSDATE), '10:30:00', v_agente, v_com)
+--     RETURNING id INTO v_id;
+--
+--     INSERT INTO COMENTARIO (id, contenido, id_publicacion, id_comentario_padre)
+--     VALUES (v_id, 'Este comentario debe fallar', v_pub, NULL);
 -- END;
 -- /
 
 -- =============================================================
 -- trg_config_fecha
--- Fecha de configuración anterior a la creación del agente
+-- Fecha de configuración anterior a la creación del agente.
+-- Espera: ORA-20060
 -- =============================================================
 
--- INSERT INTO CONFIGURACION (
---     id_agente,
---     version,
---     configuracion,
---     fechaAplicada,
---     descripcionCambio
--- )
--- VALUES (
---     1,
---     999,
---     'Simple',
---     DATE '2020-01-01',
---     'Configuracion invalida'
--- );
+-- DECLARE
+--     v_agente NUMBER;
+-- BEGIN
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Codex Writer';
+--     -- Codex Writer fue creado en SYSDATE-60; usamos una fecha anterior
+--
+--     INSERT INTO CONFIGURACION (id_agente, version, fechaAplicada, descripcion, configuracion)
+--     VALUES (v_agente, 999, TRUNC(SYSDATE) - 90, 'Configuracion con fecha invalida', 'Simple');
+-- END;
+-- /
+
+-- =============================================================
+-- trg_config_fecha_futura
+-- Fecha de configuración posterior a hoy.
+-- Espera: ORA-20100
+-- =============================================================
+
+-- DECLARE
+--     v_agente NUMBER;
+-- BEGIN
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Codex Writer';
+--
+--     INSERT INTO CONFIGURACION (id_agente, version, fechaAplicada, descripcion, configuracion)
+--     VALUES (v_agente, 998, TRUNC(SYSDATE) + 10, 'Configuracion futura invalida', 'Simple');
+-- END;
+-- /
 
 -- =============================================================
 -- trg_interviene_moderador
--- Generador intenta moderar contenido
+-- Un agente GENERADOR intenta registrar una intervención.
+-- Espera: ORA-20070
 -- =============================================================
 
--- INSERT INTO INTERVIENE (
---     id_agente,
---     id_contenido,
---     id_comunidad,
---     tipo,
---     fecha,
---     hora
--- )
--- VALUES (
---     1,
---     1,
---     1,
---     'eliminar',
---     TRUNC(SYSDATE),
---     '10:40:00'
--- );
+-- DECLARE
+--     v_agente  NUMBER;
+--     v_cont    NUMBER;
+--     v_com     NUMBER;
+-- BEGIN
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Codex Writer';   -- generador
+--     SELECT id INTO v_com    FROM COMUNIDAD WHERE nombre = 'AI Ethics';
+--     SELECT id INTO v_cont   FROM CONTENIDO c
+--                               JOIN PUBLICACION p ON p.id = c.id
+--                              WHERE p.titulo = 'Buenas prácticas para prompts evaluables';
+--
+--     INSERT INTO INTERVIENE (id_agente, id_contenido, id_comunidad, tipo, fecha, hora)
+--     VALUES (v_agente, v_cont, v_com, 'eliminar', TRUNC(SYSDATE), '10:40:00');
+-- END;
+-- /
 
 -- =============================================================
 -- trg_reclama_no_mismo_usuario
--- Reclamar un agente que ya administra
+-- Un usuario intenta reclamar un agente que ya administra.
+-- Tras el UPDATE del bloque positivo, gen2 pertenece a v_u2 (mateo).
+-- Espera: ORA-20090
 -- =============================================================
 
--- INSERT INTO RECLAMA (
---     id_usuario,
---     id_agente,
---     fechaReclamo,
---     fechaAceptacion
--- )
--- VALUES (
---     'mateo.admin2@moltbook.uy',
---     2,
---     TRUNC(SYSDATE),
---     NULL
--- );
+-- DECLARE
+--     v_agente NUMBER;
+-- BEGIN
+--     SELECT id INTO v_agente FROM AGENTE WHERE nombre = 'Nova Poster';
+--     -- Nova Poster ya pertenece a mateo.admin2 tras la transferencia del bloque positivo
+--
+--     INSERT INTO RECLAMA (id_usuario, id_agente, fechaReclamo, fechaAceptacion)
+--     VALUES ('mateo.admin2@moltbook.uy', v_agente, TRUNC(SYSDATE), NULL);
+-- END;
+-- /
