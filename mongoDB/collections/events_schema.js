@@ -13,8 +13,17 @@ db.createCollection("eventos", {
           description: "Obligatorio. Nombre del agente, desnormalizado desde Oracle"
         },
         tipo_evento: {
-          enum: ["decision", "interaccion_usuario", "accion", "metrica_ejecucion", "anomalia"],
-          description: "Obligatorio. Debe ser uno de los tipos de evento definidos"
+          enum: [
+            "decision",
+            "interaccion_usuario",
+            "accion",
+            "metrica_ejecucion",
+            "anomalia",
+            "creacion_publicacion",
+            "creacion_comentario",
+            "voto"
+          ],
+          description: "Obligatorio. Debe ser uno de los 8 tipos de evento definidos (5 sintéticos + 3 reflejo de Oracle)"
         },
         criticidad: {
           enum: ["alta", "media", "baja"],
@@ -25,8 +34,8 @@ db.createCollection("eventos", {
           description: "Obligatorio. Fecha y hora del evento"
         },
         id_comunidad: {
-          bsonType: "int",
-          description: "Opcional. Referencia a COMUNIDAD.id en Oracle, si el evento ocurre dentro de una comunidad"
+          bsonType: ["int", "null"],
+          description: "Opcional. Referencia a COMUNIDAD.id en Oracle, si el evento ocurre dentro de una comunidad. Puede ser null cuando el evento no tiene comunidad asociada."
         },
         detalle: {
           bsonType: "object",
