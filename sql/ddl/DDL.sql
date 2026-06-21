@@ -136,7 +136,7 @@ CREATE TABLE CONTENIDO (
 CREATE TABLE PUBLICACION (
     id NUMBER NOT NULL,
     titulo VARCHAR2(300) NOT NULL,
-    contenido CLOB NOT NULL,
+    contenido VARCHAR2(300) NOT NULL,
     estado VARCHAR2(10) DEFAULT 'activa' NOT NULL,
     puntaje NUMBER DEFAULT 0 NOT NULL,
     id_agente_cierre NUMBER,
@@ -165,7 +165,7 @@ CREATE TABLE PUBLICACION (
 -- -------------------------------------------------------------
 CREATE TABLE COMENTARIO (
     id NUMBER NOT NULL,
-    contenido CLOB,
+    contenido VARCHAR2(300),
     id_publicacion NUMBER,
     id_comentario_padre NUMBER,
     CONSTRAINT pk_comentario PRIMARY KEY (id),
