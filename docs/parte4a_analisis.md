@@ -39,7 +39,10 @@ Optamos por **una sola colección `eventos`**, dejando la segunda sin usar. Moti
 
 ### Tipos de evento
 
-Se definieron 5 tipos. Los dos primeros son obligatorios porque los requerimientos 5.1 y 5.3 de la Parte 5 consultan específicamente sobre ellos; los tres restantes surgen directamente de las categorías de actividad que menciona la letra del obligatorio en la Parte 4 (acciones, métricas de ejecución, comportamientos anómalos).
+Se definieron 8 tipos, en dos grupos:
+
+- **Sintéticos** (`decision`, `interaccion_usuario`, `metrica_ejecucion`, `anomalia`, `accion`): representan información que no existe en ningún lugar de Oracle, porque el modelo relacional solo guarda el resultado de las acciones del agente, no su proceso interno (razonamiento, métricas de ejecución, comportamientos anómalos). `decision` e `interaccion_usuario` son obligatorios porque los requerimientos 5.1 y 5.3 de la Parte 5 consultan específicamente sobre ellos.
+- **Reflejo de acciones ya registradas en Oracle** (`creacion_publicacion`, `creacion_comentario`, `voto`): cubren explícitamente la frase de la letra "acciones realizadas por los agentes (creación de publicaciones, comentarios, votos, etc.)". No se modela un tipo de evento por cada tabla de Oracle (por ejemplo, se descartó un tipo aparte para moderación o transferencia de agente) para no sobre-modelar; esos casos ya quedan cubiertos conceptualmente por `accion` y `decision`.
 
 **`decision`** — decisión interna tomada por el agente antes de actuar (selección de contenido, generación de una respuesta, evaluación interna), no registrada en ningún lugar de Oracle porque el modelo relacional solo guarda el resultado final, no el razonamiento previo.
 
@@ -86,6 +89,64 @@ detalle: {
 detalle: {
   patron_detectado: "...",   // ej: "alta_frecuencia", "acceso_no_autorizado"
   descripcion: "..."
+}
+```
+
+**`creacion_publicacion`** — refleja como evento de auditoría la creación de una publicación, acción que en Oracle ya queda registrada en `PUBLICACION` (Requerimiento 2.3). Cubre la frase de la letra "acciones realizadas por los agentes (creación de publicaciones...)".
+
+```javascript
+detalle: {
+  id_publicacion: ...,
+  titulo: "...",
+  estado: "..."   // 'activa' | 'cerrada' | 'eliminada', mismo dominio que PUBLICACION.estado en Oracle
+}
+```
+
+**`creacion_comentario`** — refleja como evento la creación de un comentario, ya registrado en Oracle en `COMENTARIO` (Requerimiento 2.5). Un comentario responde a una publicación o a otro comentario, nunca ambos a la vez (mismo criterio que la restricción `ck_com_referencia` del DDL de Oracle).
+
+```javascript
+detalle: {
+  id_comentario: ...,
+  id_publicacion: ...,         // si responde directo a una publicación
+  id_comentario_padre: ...     // si responde a otro comentario
+}
+```
+
+**`voto`** — refleja la emisión de un voto sobre una publicación, ya registrado en Oracle en `VOTA` (Requerimiento 2.4).
+
+```javascript
+detalle: {
+  id_publicacion: ...,
+  positivo: true   // true | false
+}
+```
+
+**`creacion_publicacion`** — refleja como evento de auditoría una publicación ya registrada en Oracle (`PUBLICACION`). Cubre la mención explícita de la letra a "acciones realizadas por los agentes (creación de publicaciones...)".
+
+```javascript
+detalle: {
+  id_publicacion: ...,   // referencia a PUBLICACION.id en Oracle
+  titulo: "...",
+  estado: "..."          // 'activa' | 'cerrada' | 'eliminada', igual que en Oracle
+}
+```
+
+**`creacion_comentario`** — refleja como evento de auditoría un comentario ya registrado en Oracle (`COMENTARIO`), ya sea sobre una publicación o como respuesta a otro comentario.
+
+```javascript
+detalle: {
+  id_comentario: ...,
+  id_publicacion: ...,        // presente si el comentario responde directo a una publicación
+  id_comentario_padre: ...    // presente si el comentario responde a otro comentario
+}
+```
+
+**`voto`** — refleja como evento de auditoría un voto ya registrado en Oracle (`VOTA`).
+
+```javascript
+detalle: {
+  id_publicacion: ...,
+  positivo: true   // mismo criterio que VOTA.positivo en Oracle
 }
 ```
 
