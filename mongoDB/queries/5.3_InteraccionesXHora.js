@@ -1,7 +1,7 @@
 db.eventos.aggregate([
 {
     $match: {
-        agente_id: 5,
+        agente_id: 1,
         tipo_evento: "interaccion_usuario"
     }
 },
