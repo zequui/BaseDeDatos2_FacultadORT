@@ -69,12 +69,10 @@ El diagrama representa las entidades principales (USUARIO, AGENTE, COMUNIDAD, CO
 - La unicidad del voto por agente y publicación queda garantizada por la PK de VOTA.
 
 **Sobre moderación**
-- El tipo de acción de moderación (`tipo` en INTERVIENE) es texto libre, con ejemplos como `'ocultar'`, `'cerrar'`, `'eliminar'`, ya que el enunciado no define un conjunto cerrado de valores.
-
-  > ⚠️ **Pendiente de resolver:** el procedure `moderarContenido` (Parte 2, Req. 2.6) implementa actualmente un `CHECK` con los valores `('eliminar', 'advertir', 'restaurar')`, que contradice este supuesto (texto libre) y además no coincide con los ejemplos del enunciado (`ocultar`, `cerrar`, `eliminar`). Falta decidir y unificar.
+- El tipo de acción de moderación (`tipo` en INTERVIENE) se modela como texto libre, con ejemplos como `'ocultar'`, `'cerrar'` y `'eliminar'`, porque el enunciado los presenta como ejemplos y no como un dominio cerrado.
 - Un agente moderador debe pertenecer a la comunidad sobre la que realiza acciones de moderación (`trg_interviene_moderador`).
 - Una misma publicación puede recibir múltiples intervenciones del mismo moderador en distintos momentos, por lo que `fecha` y `hora` forman parte de la clave primaria de INTERVIENE.
-- La coherencia entre la comunidad registrada en INTERVIENE y la comunidad del contenido intervenido no se valida estructuralmente ni mediante trigger; es un supuesto del sistema.
+- La coherencia entre la comunidad registrada en INTERVIENE y la comunidad del contenido intervenido no se valida estructuralmente ni mediante trigger; por eso se valida explícitamente en el servicio `moderarContenido` antes de insertar la intervención.
 
 **Sobre comunidades**
 - `archivada` es un flag booleano representado como `NUMBER(1)`, dado que Oracle no tiene tipo `BOOLEAN` nativo en SQL.
@@ -349,14 +347,9 @@ END;
 /
 ```
 
-> ⚠️ **PENDIENTE — decisión de diseño abierta.**
-> Este procedure inserta `fechaAceptacion = SYSDATE` en el mismo momento del reclamo, modelando la transferencia como un único paso "auto-aceptado". Esto es inconsistente con:
-> - El enunciado (página 3): *"un usuario humano reclama la administración de un agente y su usuario administrador acepta ceder dicha administración"* — describe dos actores y dos pasos.
-> - El propio análisis de supuestos (Parte 1.a): *"`fechaAceptacion` en RECLAMA puede quedar nula si el reclamo fue iniciado pero no aceptado"*.
->
-> **Falta resolver:** si se mantiene como transferencia directa de un solo paso (y en ese caso ajustar el supuesto documentado para que no contradiga la implementación), o si se separa en dos procedures (`reclamarAgente` que inserta con `fechaAceptacion = NULL`, y `aceptarReclamo` que hace el `UPDATE` de `RECLAMA.fechaAceptacion` y de `AGENTE.id_usuario`). *(Pendiente de decisión del equipo.)*
->
-> Adicionalmente, el procedure no valida explícitamente que `p_nuevo_usuario` sea distinto al administrador actual antes del `INSERT` — el trigger `trg_reclama_no_mismo_usuario` sí lo frena, pero con su mensaje genérico (`ORA-20090`) en lugar de una validación propia del procedure. No es bloqueante, es una mejora posible de prolijidad.
+**Decisión de implementación:** se modela la transferencia como una operación directa y aceptada dentro del mismo servicio. La tabla `RECLAMA` conserva el historial de la transferencia, y por eso se registra tanto `fechaReclamo` como `fechaAceptacion` con `SYSDATE`. Esta decisión simplifica el servicio obligatorio pedido por el enunciado, que solicita transferir el agente, no solamente iniciar un reclamo pendiente.
+
+**Validaciones cubiertas:** el agente no puede estar suspendido y el usuario destino tampoco puede estar suspendido. Además, si el usuario destino ya administra el agente, el trigger `trg_reclama_no_mismo_usuario` impide registrar una transferencia redundante. Luego de registrar el historial en `RECLAMA`, se actualiza `AGENTE.id_usuario` para reflejar el administrador actual.
 
 ---
 
@@ -483,26 +476,20 @@ AS
 BEGIN
 
     IF p_id_publicacion IS NOT NULL THEN
-        -- Comentario directo a una publicación: tomar la comunidad de esa publicación
+        -- Comentario directo a una publicación: tomar la comunidad de esa publicación.
         SELECT id_comunidad
         INTO v_id_comunidad
         FROM CONTENIDO
         WHERE id = p_id_publicacion;
 
     ELSE
-        -- Respuesta a otro comentario: recorrer la cadena hasta encontrar
-        -- el comentario que tiene id_publicacion NOT NULL y tomar su comunidad
+        -- Respuesta a otro comentario: la comunidad es la del comentario padre.
+        -- Como CONTENIDO centraliza id_comunidad para publicaciones y comentarios,
+        -- no es necesario recorrer toda la cadena para conocer la comunidad.
         SELECT id_comunidad
         INTO v_id_comunidad
         FROM CONTENIDO
-        WHERE id = (
-            SELECT id_publicacion
-            FROM COMENTARIO
-            START WITH id = p_id_comentario_padre
-            CONNECT BY id = PRIOR id_comentario_padre
-                AND id_publicacion IS NULL
-        )
-        AND ROWNUM = 1;
+        WHERE id = p_id_comentario_padre;
 
     END IF;
 
@@ -541,12 +528,7 @@ END;
 /
 ```
 
-> 🔴 **PENDIENTE — bug conocido, a corregir por el equipo antes de la entrega.**
-> La rama `ELSE` (respuesta a otro comentario, no a una publicación directa) arma la comunidad recorriendo la cadena de comentarios con `CONNECT BY id = PRIOR id_comentario_padre AND id_publicacion IS NULL`. La condición `id_publicacion IS NULL` filtra qué filas pueden formar parte del recorrido, pero el nodo raíz de la cadena (el comentario de primer nivel, que tiene `id_publicacion NOT NULL`) nunca cumple esa condición — por lo tanto queda excluido del propio recorrido que se supone debe alcanzarlo. El resultado es que la subquery no devuelve filas y el `SELECT ... INTO` falla con `NO_DATA_FOUND` apenas alguien intenta comentar como respuesta a otro comentario (en vez de responder directo a una publicación).
-> Como referencia, el trigger `trg_comentario_pub_cerrada` (Parte 1.c) resuelve el mismo problema de recursión de forma correcta y puede usarse como base para el fix.
-> *(Quien escribe el documento: pendiente de que el equipo aplique la corrección y vuelva a pegar el procedure actualizado antes de la entrega — este bloque debe reemplazarse.)*
-
-**Validaciones cubiertas (cuando el bug anterior se resuelva):** las mismas reglas de negocio de CONTENIDO que en Req. 2.3 (agente activo, tipo `generador`, miembro de la comunidad) se heredan vía trigger. Adicionalmente, `trg_comentario_pub_cerrada` impide comentar en una publicación cerrada, recorriendo la jerarquía de forma correcta.
+**Validaciones cubiertas:** el procedure calcula la comunidad correspondiente según si el comentario responde directamente a una publicación o a otro comentario, y luego inserta el registro en `CONTENIDO` y `COMENTARIO`. La comunidad se toma desde el contenido referenciado, evitando inconsistencias entre el parámetro `p_id_comunidad` y la comunidad real del hilo. La regla de que un comentario debe referenciar exactamente una publicación o exactamente un comentario padre queda cubierta por el `CHECK` estructural `ck_com_referencia` de `COMENTARIO`. Las reglas de negocio de `CONTENIDO` se heredan vía triggers: agente activo, usuario administrador activo, agente de tipo `generador` y pertenencia a la comunidad. Además, `trg_comentario_pub_cerrada` impide comentar en publicaciones cerradas. 
 
 ---
 
@@ -563,8 +545,8 @@ AS
     v_id_comunidad_contenido CONTENIDO.id_comunidad%TYPE;
 BEGIN
 
-    IF p_tipo NOT IN ('eliminar', 'advertir', 'restaurar') THEN
-        RAISE_APPLICATION_ERROR(-20601, 'Tipo de moderación inválido. Los valores permitidos son: eliminar, advertir, restaurar.');
+    IF TRIM(p_tipo) IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20601, 'El tipo de moderación no puede estar vacío.');
     END IF;
 
     SELECT id_comunidad
@@ -601,18 +583,7 @@ END;
 /
 ```
 
-> ⚠️ **PENDIENTE — contradicción entre análisis e implementación, a decidir por el equipo.**
-> El `CHECK` de este procedure (`p_tipo NOT IN ('eliminar', 'advertir', 'restaurar')`) impone un dominio cerrado de 3 valores que:
-> - No coincide con los ejemplos que da el propio enunciado (página 7): *"ocultar, cerrar y eliminar"*.
-> - Contradice el supuesto ya documentado en la Parte 1.a: *"el tipo de acción de moderación (`tipo` en INTERVIENE) es texto libre [...] ya que el enunciado no define un conjunto cerrado de valores"*.
-> - Los datos de prueba (Parte 1.d) ya insertan valores `'ocultar'`, `'cerrar'` y `'eliminar'` directamente con `INSERT`, sin pasar por este procedure — si se ejecutaran a través de `moderarContenido`, `'ocultar'` y `'cerrar'` fallarían contra este `CHECK`.
->
-> **Falta decidir** una de estas tres opciones (ya planteadas, resolución pendiente del equipo):
-> 1. Eliminar la validación y dejarlo como texto libre, consistente con el análisis y los datos de prueba.
-> 2. Mantener un dominio cerrado, pero con los valores del enunciado (`'ocultar'`, `'cerrar'`, `'eliminar'`).
-> 3. Mantener los valores actuales del procedure y actualizar el análisis de supuestos para reflejar que en realidad sí hay un dominio cerrado (en ese caso, también habría que revisar los datos de prueba para que usen esos mismos valores).
-
-**Validaciones cubiertas:** coherencia entre la comunidad pasada por parámetro y la comunidad real del contenido (validación propia del procedure, no cubierta por trigger ni CHECK — de hecho, el análisis de supuestos señala explícitamente que esta coherencia *"no se valida estructuralmente [...] por lo que constituye un supuesto del sistema"*; este procedure sí la valida en tiempo de ejecución, mejorando lo documentado). El resto (agente de tipo `moderador`, moderador miembro de la comunidad) se cubre con `trg_interviene_moderador`.
+**Validaciones cubiertas:** el tipo de moderación no puede estar vacío, pero no se restringe a un conjunto cerrado de valores porque el enunciado presenta `'ocultar'`, `'cerrar'` y `'eliminar'` como ejemplos. El procedure valida además que el contenido pertenezca realmente a la comunidad indicada antes de insertar en `INTERVIENE`. El resto de reglas de negocio —que el agente sea `moderador` y pertenezca a la comunidad— se cubren con `trg_interviene_moderador`.
 
 ---
 
@@ -672,25 +643,36 @@ END;
 
 ## Requerimiento 2.8 — Ranking de publicaciones *(obligatorio)*
 
-> 🔴 **PENDIENTE — no implementado.**
-> El enunciado pide (página 10): *"un servicio que retorne el ranking de las 10 publicaciones activas con mayor puntaje positivo dentro de una comunidad específica en los últimos 30 días [...] con un parámetro opcional para filtrar por usuario administrador del agente autor [...] incluyendo puntaje total, título, fecha, nombre del agente autor y su usuario administrador"*.
->
-> Este requerimiento es **obligatorio** y todavía no fue escrito. Queda pendiente definir e implementar el procedure (o función, a definir) correspondiente antes de la entrega. *(Pendiente de que el equipo lo resuelva y lo pase para incorporarlo a este documento.)*
+```sql
+CREATE OR REPLACE PROCEDURE rankingPublicaciones(
+    p_id_comunidad IN NUMBER,
+    p_usuario_admin IN VARCHAR2 DEFAULT NULL,
+    p_resultado OUT SYS_REFCURSOR
+)
+AS
+BEGIN
+    OPEN p_resultado FOR
+        SELECT
+            p.puntaje AS puntaje_total,
+            p.titulo AS titulo_publicacion,
+            c.fechaCreacion AS fecha_publicacion,
+            a.nombre AS nombre_agente_autor,
+            u.mail AS usuario_administrador
+        FROM PUBLICACION p
+        JOIN CONTENIDO c ON c.id = p.id
+        JOIN AGENTE a ON a.id = c.id_agente
+        JOIN USUARIO u ON u.mail = a.id_usuario
+        WHERE c.id_comunidad = p_id_comunidad
+          AND p.estado = 'activa'
+          AND c.fechaCreacion >= TRUNC(SYSDATE) - 30
+          AND (p_usuario_admin IS NULL OR u.mail = p_usuario_admin)
+        ORDER BY p.puntaje DESC, c.fechaCreacion DESC
+        FETCH FIRST 10 ROWS ONLY;
+END;
+/
+```
 
----
-
-## Resumen de pendientes — Parte 2
-
-| Requerimiento | Estado | Pendiente |
-|---|---|---|
-| 2.1 | ✅ Cerrado | — |
-| 2.2 | ⚠️ Con observación | Decidir si transferencia es directa (un paso) o en dos pasos (reclamo + aceptación) |
-| 2.3 | ✅ Cerrado | — |
-| 2.4 | ✅ Cerrado | — |
-| 2.5 | 🔴 Bug conocido | Corregir el `CONNECT BY` que rompe al responder a un comentario |
-| 2.6 | ⚠️ Con observación | Decidir dominio de `tipo` (texto libre vs. cerrado, y con qué valores) |
-| 2.7 | ✅ Cerrado | — |
-| 2.8 | 🔴 No implementado | Escribir el procedure/función (obligatorio) |
+**Validaciones cubiertas y criterio de ranking:** el servicio recibe una comunidad obligatoria y un usuario administrador opcional. Retorna únicamente publicaciones `activa` creadas en los últimos 30 días dentro de esa comunidad. El ranking se ordena por `PUBLICACION.puntaje` en forma descendente; ante empate se priorizan publicaciones más recientes. El resultado incluye los campos solicitados por el enunciado: puntaje total, título, fecha, nombre del agente autor y usuario administrador.
 
 ---
 
@@ -948,27 +930,107 @@ db.createCollection("eventos", {
 
 ## 4.c Proceso de integración Oracle → MongoDB
 
-El proceso de integración se implementó en Python (`oracledb` + `pymongo`), recorriendo las tablas de Oracle y generando un documento de evento por cada fila relevante, según el tipo de evento que corresponda.
+El proceso de integración se implementó en Python en el archivo `4c_integracion.py`, usando `oracledb` para leer la base relacional y `pymongo` para escribir en MongoDB. El objetivo del script es poblar el subsistema de analítica a partir de los datos existentes en Oracle, sin cargar eventos manualmente ni inventar acciones desconectadas de la base transaccional.
 
-**Conexiones:**
-- Oracle: `localhost:1521/XE`.
-- MongoDB: `localhost:27017`, base `moltbook_analytics`, colección `eventos`.
+### Configuración de conexiones
 
-**Pasos del proceso:**
+Al comienzo del script se definen los parámetros de conexión:
 
-1. **Recreación de la colección.** Al inicio, se elimina la colección `eventos` si existe (`drop()`) y se vuelve a crear con el `$jsonSchema` embebido en el propio script (idéntico en estructura al de 4.b), para asegurar que cada corrida parta de un estado limpio y validado.
-2. **Eventos de acción** (reflejo de Oracle): se recorren `CONTENIDO` + `PUBLICACION` (→ `creacion_publicacion`), `CONTENIDO` + `COMENTARIO` (→ `creacion_comentario`), `VOTA` (→ `voto`) e `INTERVIENE` (→ `accion`, con `tipo_accion = "moderacion"`).
-3. **Eventos de decisión** (sintéticos): se genera un evento `decision` por cada publicación y cada comentario existente, simulando la decisión interna previa del agente (contexto, alternativas evaluadas, alternativa elegida).
-4. **Eventos de métrica de ejecución** (sintéticos, simulados): se genera un evento `metrica_ejecucion` por cada fila de `CONTENIDO` y de `VOTA`, con tiempos de respuesta y cantidad de tokens aleatorios.
-5. **Eventos de anomalía** (sintéticos, basados en patrones reales): se ejecuta `SELECT id_agente, TRUNC(fecha), COUNT(*) FROM VOTA GROUP BY id_agente, TRUNC(fecha) HAVING COUNT(*) >= 3` para detectar agentes con alta frecuencia de votos en un día, y se consultan los agentes cuyo usuario administrador tiene `activo = 'Suspendido'`.
-6. **Eventos de interacción con usuario** (sintéticos): se generan a partir de `RECLAMA`, un evento por cada solicitud de transferencia (`canal = "solicitud_transferencia"`) y, si fue aceptada, un segundo evento (`canal = "transferencia_aceptada"`).
-7. Para cada evento se resuelve `nombre_agente` consultando `AGENTE JOIN USUARIO`, desnormalizándolo en el documento al momento de la inserción, según lo definido en el supuesto de 4.a.
+```python
+ORACLE_DSN  = "localhost:1521/XE"
+ORACLE_USER = "moltbook"
+ORACLE_PASS = "moltbook"
 
-**Volumen de datos:** la cantidad de eventos generados en MongoDB es directamente proporcional a la cantidad de filas en las tablas de origen de Oracle (una fila de `CONTENIDO`/`PUBLICACION` genera al menos un evento `creacion_publicacion` + un evento `decision` + un evento `metrica_ejecucion`; análogamente para comentarios y votos), cumpliendo con el requisito del enunciado de que el volumen en MongoDB sea equivalente al de la base relacional.
+MONGO_URI = "mongodb://localhost:27017"
+MONGO_DB = "moltbook_analytics"
+MONGO_COLL = "eventos"
+```
 
-**Script:** ver `4c_integracion.py` para el detalle completo de las funciones de generación de cada tipo de evento y el recorrido de tablas.
+La conexión a Oracle se realiza con:
 
-> *Nota: este proceso fue ya ejecutado con éxito por el equipo contra una instancia local de Oracle y MongoDB, poblando la colección `eventos` en `moltbook_analytics`.*
+```python
+oracle_conn = oracledb.connect(user=ORACLE_USER, password=ORACLE_PASS, dsn=ORACLE_DSN)
+cursor = oracle_conn.cursor()
+```
+
+La conexión a MongoDB se realiza con:
+
+```python
+mongo_client = pymongo.MongoClient(MONGO_URI)
+db = mongo_client[MONGO_DB]
+eventos = db[MONGO_COLL]
+```
+
+De esta forma, Oracle actúa como origen de datos y MongoDB como destino analítico. El script consulta tablas relacionales mediante `SELECT` y, por cada acción detectada, construye un documento Python (`dict`) compatible con el schema validator y lo inserta con `eventos.insert_one(evento)`.
+
+### Funcionamiento general del script
+
+1. **Conecta a Oracle y MongoDB.** Usa las credenciales configuradas al inicio. Si la instancia de Oracle usa otro servicio, usuario o contraseña, se modifican `ORACLE_DSN`, `ORACLE_USER` y `ORACLE_PASS`. Si MongoDB corre en otro host o puerto, se modifica `MONGO_URI`.
+2. **Recrea la colección de eventos.** El script ejecuta `eventos.drop()` y luego `db.create_collection(...)` con el `$jsonSchema` de la Parte 4.b. Esto asegura que cada ejecución de prueba empiece desde una colección vacía y validada.
+3. **Lee las tablas de Oracle.** Recorre `PUBLICACION`, `COMENTARIO`, `VOTA`, `INTERVIENE`, `RECLAMA`, `AGENTE` y `USUARIO`, usando joins con `CONTENIDO` cuando necesita fecha, hora o comunidad.
+4. **Normaliza tipos antes de insertar.** Los identificadores numéricos de Oracle se convierten con `int(...)` para cumplir `bsonType: "int"`. Las fechas y horas separadas de Oracle se combinan en un `datetime`, requerido por `bsonType: "date"`. En eventos sin comunidad se guarda `id_comunidad: null`, permitido por el validator.
+5. **Genera documentos de evento.** Cada función `generar_evento_*` arma un documento con campos comunes (`agente_id`, `nombre_agente`, `tipo_evento`, `criticidad`, `fecha`, `id_comunidad`, `detalle`) y un `detalle` específico según el tipo.
+6. **Inserta en MongoDB.** Cada evento se almacena como un documento independiente en `moltbook_analytics.eventos`.
+7. **Cierra conexiones.** Al finalizar, cierra el cursor, la conexión Oracle y el cliente MongoDB.
+
+### Correspondencia entre Oracle y MongoDB
+
+| Origen en Oracle | Evento generado en MongoDB | Correspondencia |
+|---|---|---|
+| `CONTENIDO` + `PUBLICACION` | `creacion_publicacion` | 1 documento por publicación |
+| `CONTENIDO` + `COMENTARIO` | `creacion_comentario` | 1 documento por comentario |
+| `VOTA` | `voto` | 1 documento por voto |
+| `INTERVIENE` | `accion` con `tipo_accion = "moderacion"` | 1 documento por intervención |
+| `PUBLICACION` y `COMENTARIO` | `decision` | 1 documento sintético por acción de generación de contenido |
+| `CONTENIDO` y `VOTA` | `metrica_ejecucion` | 1 documento sintético por acción medida |
+| `VOTA` agrupada por agente y día | `anomalia` | 1 documento por patrón detectado (`HAVING COUNT(*) >= 3`) |
+| `AGENTE` + `USUARIO` suspendido | `anomalia` | 1 documento por agente asociado a usuario suspendido |
+| `RECLAMA` | `interaccion_usuario` | 1 documento por solicitud y otro si existe aceptación |
+
+Esto cumple el requisito de coherencia con la Parte 1.d: si en Oracle existen `n` publicaciones, `n` comentarios, `n` votos o `n` intervenciones, el proceso genera documentos equivalentes para esas acciones en MongoDB. Los eventos `decision`, `metrica_ejecucion` y `anomalia` son sintéticos, pero se derivan de filas reales o agregaciones sobre Oracle, por lo que siguen estando trazados a agentes, fechas y acciones existentes.
+
+### Cómo ejecutar el proceso
+
+Antes de ejecutar el script deben estar levantadas ambas bases:
+
+- Oracle con el esquema relacional creado (`DDL.sql`, `TRIGGERS.sql`, procedures y datos de prueba cargados).
+- MongoDB escuchando en `localhost:27017` o en la URI configurada.
+
+Instalar dependencias de Python:
+
+```bash
+pip install oracledb pymongo
+```
+
+Ejecutar desde la carpeta donde esté el archivo:
+
+```bash
+python 4c_integracion.py
+```
+
+Durante la ejecución se imprimen mensajes por etapa:
+
+```text
+Generando eventos de acción...
+Generando eventos de decisión...
+Generando eventos de métrica...
+Generando eventos de anomalía...
+Generando eventos de interacción usuario...
+¡Integración completada!
+```
+
+Para verificar la carga en MongoDB:
+
+```javascript
+use moltbook_analytics
+db.eventos.countDocuments()
+db.eventos.aggregate([
+  { $group: { _id: "$tipo_evento", total: { $sum: 1 } } },
+  { $sort: { total: -1 } }
+])
+```
+
+Si aparece un error de validación de MongoDB, debe revisarse el campo indicado por el error. Por ejemplo, `id_comunidad` puede ser `null` en votos, métricas, anomalías e interacciones de usuario; por eso el validator de la Parte 4.b acepta `bsonType: ["int", "null"]`.
 
 ---
 
