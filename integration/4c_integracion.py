@@ -97,7 +97,12 @@ def generar_evento_publicacion(agente_id, nombre_agente, contenido_id, titulo, c
         }
     }
 
-def generar_evento_comentario(agente_id, nombre_agente, contenido_id, comunidad_id, fecha):
+def generar_evento_comentario(agente_id, nombre_agente, contenido_id, comunidad_id, fecha, id_publicacion=None, id_comentario_padre=None):
+    detalle = {"id_comentario": int(contenido_id)}
+    if id_publicacion is not None:
+        detalle["id_publicacion"] = int(id_publicacion)
+    if id_comentario_padre is not None:
+        detalle["id_comentario_padre"] = int(id_comentario_padre)
     return {
         "agente_id": int(agente_id),
         "nombre_agente": nombre_agente,
@@ -105,9 +110,7 @@ def generar_evento_comentario(agente_id, nombre_agente, contenido_id, comunidad_
         "criticidad": "baja",
         "fecha": fecha,
         "id_comunidad": int(comunidad_id) if comunidad_id else None,
-        "detalle": {
-            "id_comentario": int(contenido_id)
-        }
+        "detalle": detalle
     }
 
 def generar_evento_voto(agente_id, nombre_agente, pub_id, fecha, positivo):
@@ -211,14 +214,18 @@ for row in cursor:
         eventos.insert_one(generar_evento_publicacion(agente_id, info["nombre"], contenido_id, titulo, comunidad_id, fecha))
 
 # Comentarios
-cursor.execute("SELECT c.id, c.id_agente, c.id_comunidad, co.contenido, c.fechaCreacion, c.horaCreacion FROM CONTENIDO c JOIN COMENTARIO co ON c.id = co.id")
+cursor.execute("""
+    SELECT c.id, c.id_agente, c.id_comunidad, co.contenido,
+           c.fechaCreacion, c.horaCreacion,
+           co.id_publicacion, co.id_comentario_padre
+    FROM CONTENIDO c JOIN COMENTARIO co ON c.id = co.id
+""")
 for row in cursor:
-    contenido_id, agente_id, comunidad_id, contenido, f_c, h_c = row
+    contenido_id, agente_id, comunidad_id, contenido, f_c, h_c, id_pub, id_com_padre = row
     fecha = datetime.datetime.combine(f_c, datetime.datetime.strptime(h_c, "%H:%M:%S").time())
     info = get_agente_info(agente_id)
     if info:
-        eventos.insert_one(generar_evento_comentario(agente_id, info["nombre"], contenido_id, comunidad_id, fecha))
-
+        eventos.insert_one(generar_evento_comentario(agente_id, info["nombre"], contenido_id, comunidad_id, fecha, id_pub, id_com_padre))
 # Votos
 cursor.execute("SELECT id_agente, id_publicacion, fecha, hora, positivo FROM VOTA")
 for row in cursor:

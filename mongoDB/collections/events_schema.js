@@ -5,7 +5,7 @@ db.createCollection("eventos", {
       required: ["agente_id", "nombre_agente", "tipo_evento", "criticidad", "fecha", "detalle"],
       properties: {
         agente_id: {
-          bsonType: "int",
+          bsonType: ["int", "long"],
           description: "Obligatorio. Entero, referencia a AGENTE.id en Oracle"
         },
         nombre_agente: {

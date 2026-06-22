@@ -1,6 +1,5 @@
 CREATE OR REPLACE PROCEDURE generarComentario(
     p_id_agente NUMBER,
-    p_id_comunidad NUMBER,
     p_contenido VARCHAR2,
     p_id_publicacion NUMBER DEFAULT NULL,
     p_id_comentario_padre NUMBER DEFAULT NULL

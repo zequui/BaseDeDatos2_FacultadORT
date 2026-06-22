@@ -105,11 +105,20 @@ BEFORE INSERT ON CONTENIDO
 FOR EACH ROW
 DECLARE
     v_tipo_part PARTICIPA.tipo%TYPE;
+    v_es_comentario NUMBER;
 BEGIN
+    SELECT COUNT(*) INTO v_es_comentario
+    FROM COMENTARIO
+    WHERE id = :NEW.id;
+
+    IF v_es_comentario > 0 THEN
+        RETURN;
+    END IF;
+
     BEGIN
         SELECT tipo INTO v_tipo_part
         FROM PARTICIPA
-        WHERE id_agente = :NEW.id_agente
+        WHERE id_agente    = :NEW.id_agente
           AND id_comunidad = :NEW.id_comunidad;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
@@ -141,7 +150,7 @@ BEGIN
         FROM   COMENTARIO
         WHERE  id_publicacion IS NOT NULL
         START WITH id = :NEW.id_comentario_padre
-        CONNECT BY id = PRIOR id_comentario_padre;  --busca recursivamente el padre
+        CONNECT BY PRIOR id = id_comentario_padre;
     END IF;
 
     SELECT estado INTO v_estado FROM PUBLICACION WHERE id = v_pub_id;

@@ -200,7 +200,7 @@ El diagrama representa las entidades principales (USUARIO, AGENTE, COMUNIDAD, CO
 
 El DDL completo se entrega en el archivo `DDL.sql` (tablas, claves primarias, foráneas y restricciones de dominio/semánticas estructurales) y `TRIGGERS.sql` (restricciones no estructurales). A continuación se referencia su contenido; ver archivos adjuntos para el detalle completo.
 
-- **`DDL.sql`** — 11 tablas: `USUARIO`, `TELEFONO_USUARIO`, `AGENTE`, `CONFIGURACION`, `COMUNIDAD`, `PARTICIPA`, `RECLAMA`, `CONTENIDO`, `PUBLICACION`, `COMENTARIO`, `CITA`, `VOTA`, `INTERVIENE`.
+- **`DDL.sql`** — 13 tablas: `USUARIO`, `TELEFONO_USUARIO`, `AGENTE`, `CONFIGURACION`, `COMUNIDAD`, `PARTICIPA`, `RECLAMA`, `CONTENIDO`, `PUBLICACION`, `COMENTARIO`, `CITA`, `VOTA`, `INTERVIENE`.
 - **`TRIGGERS.sql`** — 13 triggers que implementan las restricciones no estructurales detalladas en la tabla anterior.
 
 ---
@@ -465,7 +465,6 @@ END;
 ```sql
 CREATE OR REPLACE PROCEDURE generarComentario(
     p_id_agente NUMBER,
-    p_id_comunidad NUMBER,
     p_contenido CLOB,
     p_id_publicacion NUMBER DEFAULT NULL,
     p_id_comentario_padre NUMBER DEFAULT NULL
