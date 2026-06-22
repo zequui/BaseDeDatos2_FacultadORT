@@ -677,6 +677,7 @@ END;
 ---
 
 <a name="parte-3"></a>
+
 # Parte 3 — Procesamiento de consultas SQL
 
 ## Pregunta de negocio
@@ -712,42 +713,60 @@ ORDER BY anio, mes, total_intervenciones DESC;
 
 ---
 
+## Plan de ejecución
+
+![Plan de ejecucion](../assets/screenshots/executionplan.png)
+
+---
+
 ## Operaciones principales del plan de ejecución
 
-- **Full Scan (TABLE ACCESS FULL en Oracle):** Oracle lee todas las filas de INTERVIENE de principio a fin, ya que no hay un filtro previo que reduzca el conjunto de datos antes del join.
-- **Hash Join:** para combinar las tablas, Oracle construye una tabla de hash en memoria con la tabla más pequeña y la recorre buscando coincidencias al escanear la más grande. Este proceso se encadena para cada join de la consulta.
-- **Hash Group By:** el `GROUP BY` con `COUNT(*)` se resuelve construyendo una tabla de hash interna donde se acumulan los conteos por cada combinación de atributos del grupo.
-- **Sort Order By:** el `ORDER BY` final obliga a materializar y ordenar el resultado antes de devolverlo.
+El plan se lee de adentro hacia afuera: las operaciones más indentadas se ejecutan primero y su resultado alimenta a la operación que las contiene.
+
+- **TABLE ACCESS FULL — INTERVIENE:** Oracle recorre toda la tabla INTERVIENE bloque por bloque. Es el punto de partida del plan y el de mayor costo, ya que no hay ningún filtro previo que reduzca los datos antes de empezar a unir tablas.
+
+- **INDEX FULL SCAN — PK_AGENTE + TABLE ACCESS BY INDEX ROWID — AGENTE:** Oracle recorre el índice de clave primaria de AGENTE en orden y accede a cada fila directamente por su posición física (`ROWID`). Al tener el índice ya ordenado por `id`, los datos de AGENTE llegan listos para el join siguiente.
+
+- **MERGE JOIN (INTERVIENE + AGENTE):** Oracle une INTERVIENE con AGENTE comparando fila a fila en orden. Esto es eficiente porque los datos de AGENTE ya vienen ordenados por `id` gracias al paso anterior, así que no hace falta ningún procesamiento extra antes de hacer la comparación.
+
+- **HASH JOIN — COMUNIDAD:** Oracle construye una tabla de hash interna con los datos de COMUNIDAD (combinando sus índices `PK_COMUNIDAD` y `UQ_COMUNIDAD_NOMBRE`) y luego busca coincidencias en el resultado del join anterior. Para COMUNIDAD trabaja directamente sobre los índices disponibles, sin necesidad de leer los bloques de la tabla en disco.
+
+- **HASH JOIN — USUARIO:** mismo mecanismo que con COMUNIDAD. Oracle usa los índices `PK_USUARIO` y `UQ_USUARIO_ALIAS` para construir la tabla de hash y completar el último join.
+
+- **HASH GROUP BY:** el `GROUP BY` con `COUNT(*)` se resuelve con una tabla de hash interna donde Oracle acumula el conteo por cada combinación única de atributos del grupo.
+
+- **SORT ORDER BY:** el `ORDER BY` final ordena el resultado completo antes de devolverlo.
 
 ---
 
 ## Relación con algoritmos estudiados
 
-El algoritmo más relevante de este plan es el **Hash Join**, estudiado en clase. El motor divide la tabla menor en particiones que intenta mantener en los buffers de memoria disponibles, construye una tabla de hash sobre el atributo de join y luego recorre la tabla mayor para encontrar coincidencias. Si las particiones entran en memoria, el costo es relativamente bajo; si no entran, Oracle aplica el Hash Join recursivo, que requiere múltiples pasadas sobre los datos y resulta significativamente más costoso.
+El algoritmo más relevante de este plan es el **Hash Join**, estudiado en clase, que Oracle utiliza para incorporar COMUNIDAD y USUARIO al resultado. El motor construye una tabla de hash sobre el atributo de join de la tabla más pequeña y luego recorre la tabla mayor buscando coincidencias. Si las particiones entran en memoria el costo es relativamente bajo; si no, Oracle aplica Hash Join recursivo con múltiples pasadas sobre los datos.
 
-El **Sort Order By** se comporta como el Merge Sort externo visto en clase: si el resultado no cabe en memoria, Oracle lo escribe parcialmente a disco, ordena cada parte y luego las fusiona. Por eso es conveniente evitar `ORDER BY` en consultas analíticas cuando no es estrictamente necesario.
+El join entre INTERVIENE y AGENTE se resolvió con **Merge Join**, también visto en clase como una alternativa eficiente cuando ambos lados del join ya vienen ordenados por el atributo de join. En este caso, Oracle aprovechó que `PK_AGENTE` entrega los datos de AGENTE ordenados por `id` para hacer el merge directamente.
 
-El **Full Scan** corresponde directamente al algoritmo estudiado en clase: Oracle lee todos los bloques de la tabla secuencialmente. Es la operación base cuando no hay índices aplicables, y su costo escala linealmente con el tamaño de la tabla.
+El **Full Scan** (TABLE ACCESS FULL en Oracle) corresponde al algoritmo estudiado en clase: lectura secuencial de todos los bloques de la tabla, sin usar índices. Aparece sobre INTERVIENE porque no hay ningún filtro previo que reduzca los datos antes del join. Su costo escala linealmente con el tamaño de la tabla.
+
+El **SORT ORDER BY** se comporta como el Merge Sort externo visto en clase: si el resultado no cabe en memoria, Oracle lo escribe parcialmente a disco, ordena cada parte y luego las fusiona.
 
 ---
 
 ## Similitudes entre el plan de ejecución y los algoritmos estudiados
 
-- Los joins se resuelven de a pares, materializando el resultado de cada uno para usarlo como entrada del siguiente, tal como se estudia al construir el plan físico.
-- Oracle elige Hash Join sobre Nested Loops porque las tablas no tienen un orden preexistente en los atributos de join y no hay índices secundarios sobre las claves foráneas de INTERVIENE. En clase se vio que Nested Loops es conveniente cuando la tabla interna es pequeña o tiene un índice disponible; en este caso no se dan esas condiciones.
+- El plan encadena los joins de a pares, usando el resultado de cada uno como entrada del siguiente, tal como se estudia al construir el plan físico de una consulta con múltiples joins.
+- Oracle eligió Merge Join para el primer join (INTERVIENE + AGENTE) porque el índice de clave primaria de AGENTE ya entregaba los datos ordenados, eliminando la necesidad de construir una tabla de hash. En clase se vio que Merge Join es preferible cuando los datos ya vienen ordenados por el atributo de join.
+- Para COMUNIDAD y USUARIO, Oracle optó por Hash Join sobre Index Join en lugar de acceder a las tablas físicas. Esto es consistente con lo visto en clase: cuando las columnas necesarias ya están cubiertas por índices disponibles, el motor puede evitar el acceso a la tabla y reducir el costo de I/O.
 - La proyección de los atributos del SELECT se ejecuta en modo pipelined junto con los joins, sin agregar un paso separado de materialización, consistente con lo visto en clase para la operación π.
 
 ---
 
 ## Eficiencia y posibles mejoras
 
-La consulta actualmente hace un Full Scan sobre INTERVIENE, lo que puede ser costoso si esa tabla crece con el tiempo dado que registra cada acción de moderación del sistema. Algunas mejoras posibles:
+El punto de mayor costo del plan es el **TABLE ACCESS FULL sobre INTERVIENE**, que escala linealmente con el volumen de intervenciones registradas. Algunas mejoras posibles:
 
-- **Índice sobre `INTERVIENE.fecha`:** si en el futuro se filtra por rango de fechas (por ejemplo, últimos 3 meses), un índice permitiría evitar leer toda la tabla.
+- **Índice sobre `INTERVIENE.fecha`:** si en el futuro se agrega un filtro por rango de fechas (por ejemplo, últimos 3 meses), un índice permitiría evitar leer toda la tabla y reduciría significativamente el costo del Full Scan.
 - **Índice sobre `INTERVIENE.id_comunidad`:** útil si la consulta se parametriza para una comunidad específica, reduciendo el volumen de datos que entra al join.
 - **Vista materializada:** si este reporte se ejecuta con frecuencia, una vista materializada con refresco periódico evitaría recalcular los joins y agregaciones en cada ejecución.
-
-> *Nota: el plan de ejecución real obtenido con `EXPLAIN PLAN` / `AUTOTRACE` (captura de pantalla) debe adjuntarse en la entrega final junto a este análisis.*
 
 ---
 
