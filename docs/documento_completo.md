@@ -1044,4 +1044,42 @@ Si aparece un error de validación de MongoDB, debe revisarse el campo indicado 
 <a name="parte-6"></a>
 # Parte 6 — Reflexión escrita
 
-> ⚠️ **Sección pendiente.** Responder las 3 preguntas de reflexión del enunciado.
+## ¿Cómo aplicaron los conceptos del material de estudio en su modelado de MongoDB?
+
+El material de referencia sugerido por el enunciado (Highly Scalable Blog, 2012) plantea varias técnicas de modelado para bases de datos NoSQL. Las dos que más influyeron en nuestro diseño fueron el **patrón polimórfico** y el uso de **datos desnormalizados**.
+
+El patrón polimórfico consiste en almacenar en una sola colección documentos que tienen distintas formas, diferenciados por un campo discriminador. En nuestro caso, la colección `eventos` contiene 8 tipos de documento distintos, todos con los mismos campos comunes (`agente_id`, `nombre_agente`, `tipo_evento`, `criticidad`, `fecha`) y un campo `detalle` cuya estructura interna varía completamente según el `tipo_evento`. Por ejemplo, un evento `decision` tiene dentro de `detalle` el contexto operacional, los parámetros de entrada y las alternativas evaluadas, mientras que un evento `voto` tiene el id de publicación y si el voto fue positivo o no. Este patrón nos permitió cumplir el requisito del enunciado de que el sistema sea "altamente dinámico" y admita nuevos tipos de eventos sin modificar la estructura existente: si mañana aparece un tipo `actualizacion_prompt`, basta con insertarlo con su propio `detalle`, sin tocar el resto de la colección ni los documentos ya guardados.
+
+La desnormalización de `nombre_agente` dentro de cada evento es la otra aplicación concreta. En Oracle, para saber el nombre del agente de un evento habría que hacer un JOIN con la tabla AGENTE. En MongoDB no existen joins reales (solo `$lookup`, que es costoso), así que copiamos el nombre del agente al momento de insertar el evento. El costo aceptado es que si un agente cambia de nombre en Oracle después de generados los eventos, los eventos históricos conservan el nombre viejo, algo que aceptamos explícitamente porque la colección tiene carácter de auditoría/histórico, no de estado actual.
+
+Desde el material visto en clase (laboratorio 10), aplicamos la integridad de dominio mediante `$jsonSchema` validators: los campos `criticidad` y `tipo_evento` tienen `enum` que restringe los valores aceptados exactamente como un `CHECK` de Oracle, y los campos del schema tienen `bsonType` definido para garantizar los tipos de datos esperados.
+
+---
+
+## ¿Consideran que su modelado puede ser mejorado en algún aspecto?
+
+Hay al menos dos aspectos mejorables:
+
+**Validación del `detalle` por tipo de evento.** El validator actual solo exige que `detalle` sea un objeto, sin validar su contenido interno. Esto es intencional (para cumplir el requisito de extensibilidad del enunciado), pero implica que un evento `decision` podría insertarse sin los campos `contexto_operacional` o `parametros_entrada` que exige el Requerimiento 5.1, y el validator no lo detectaría. Una mejora posible sería usar esquemas condicionales (`if`/`then`/`else` en `$jsonSchema`) para validar el `detalle` según el valor de `tipo_evento`. El costo es que habría que actualizar el validator cada vez que se incorpore un nuevo tipo, sacrificando la extensibilidad — por eso no se implementó, pero es una mejora válida si el conjunto de tipos queda estable.
+
+**Los eventos sintéticos usan datos aleatorios.** Los eventos `decision`, `metrica_ejecucion`, `anomalia` e `interaccion_usuario` (estos últimos parcialmente: los que no provienen de `RECLAMA`) se generan con valores simulados (`random`). En un sistema real, estos datos vendrían del propio agente de IA en tiempo real. Para el alcance de este obligatorio, la simulación es suficiente, pero en producción el proceso de generación de eventos sería radicalmente distinto: los agentes emitirían sus propios eventos al sistema, sin necesitar un script de integración externo.
+
+---
+
+## Ventajas y desventajas de haber utilizado MongoDB en este subsistema. ¿Encuentran algún otro caso de uso del obligatorio donde podría usarse?
+
+**Ventajas en este subsistema:**
+
+La ventaja principal es el esquema flexible. El enunciado describe que los eventos "pueden diferir significativamente en su estructura" y que "van a aparecer tipos de eventos nuevos en el futuro que al momento no están definidos". Esto es exactamente el caso de uso donde MongoDB brilla: en Oracle, agregar un nuevo tipo de evento con atributos distintos requeriría un `ALTER TABLE` o crear una nueva tabla, con el riesgo de romper consultas existentes. En MongoDB, se inserta el nuevo tipo directamente, sin modificar nada de lo que ya existe.
+
+Otra ventaja es el volumen de escritura. Los eventos de auditoría se generan de forma masiva y continua (una publicación, un comentario, un voto, cada uno genera al menos un evento). MongoDB está diseñado para volúmenes altos de inserción, lo que lo hace más adecuado que Oracle para este patrón de "append-only" (solo se inserta, casi nunca se modifica o elimina).
+
+**Desventajas en este subsistema:**
+
+La principal desventaja es la ausencia de integridad referencial automática entre MongoDB y Oracle. El campo `agente_id` en la colección `eventos` referencia a `AGENTE.id` en Oracle, pero MongoDB no verifica que ese agente exista. Si un agente se elimina de Oracle (o su `id` cambia, aunque en nuestro DDL es un `IDENTITY` inmutable), los eventos huérfanos quedan en Mongo sin ningún mecanismo automático que lo detecte. En este sistema la responsabilidad queda en el proceso de integración.
+
+Otra desventaja es que las consultas que cruzan datos de Oracle y MongoDB no son posibles de forma nativa: si se quisiera, por ejemplo, mostrar el ranking del Requerimiento 2.8 (publicaciones con mayor puntaje) junto con la cantidad de eventos de anomalía del agente autor, habría que hacer dos consultas separadas (una en Oracle, una en MongoDB) y cruzar los resultados a nivel de aplicación.
+
+**¿Dónde más podría usarse este modelo de datos en el obligatorio?**
+
+Un caso natural sería el **historial de configuraciones de los agentes** (tabla CONFIGURACION en Oracle). Cada agente puede evolucionar a lo largo del tiempo con distintas versiones de configuración, y en Oracle esto se modela como filas en una tabla con `(id_agente, version)` como clave primaria. En MongoDB, el historial completo de configuraciones podría modelarse como un array de subdocumentos dentro del propio documento del agente, con cada elemento del array representando una versión. Esto eliminaría el JOIN necesario para obtener el historial completo y agruparía toda la información del agente en un solo documento, algo que calza bien con el patrón de "documento agregado" que describe el material de referencia.
