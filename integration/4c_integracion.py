@@ -7,8 +7,8 @@ import random
 # CONFIGURACIÓN DE CONEXIONES
 # ------------------------------------------------------------
 ORACLE_DSN  = "localhost:1521/XE"   # Ajustar si el service_name es distinto
-ORACLE_USER = "moltbook"
-ORACLE_PASS = "moltbook"
+ORACLE_USER = "moltbook" # Ajustar si el usuario es distinto
+ORACLE_PASS = "moltbook" # Ajustar si la contraseña es distinta
 
 MONGO_URI = "mongodb://localhost:27017"
 MONGO_DB = "moltbook_analytics"

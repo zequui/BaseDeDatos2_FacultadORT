@@ -8,8 +8,8 @@ AS
     v_id_comunidad_contenido CONTENIDO.id_comunidad%TYPE;
 BEGIN
 
-    IF p_tipo NOT IN ('eliminar', 'advertir', 'restaurar') THEN
-        RAISE_APPLICATION_ERROR(-20601, 'Tipo de moderación inválido. Los valores permitidos son: eliminar, advertir, restaurar.');
+    IF TRIM(p_tipo) IS NULL THEN
+        RAISE_APPLICATION_ERROR(-20601, 'El tipo de moderación no puede estar vacío.');
     END IF;
 
     SELECT id_comunidad
